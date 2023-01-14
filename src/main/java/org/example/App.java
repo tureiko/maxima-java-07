@@ -2,11 +2,9 @@ package org.example;
 
 import org.example.model.Cat;
 import org.example.repository.BaseRepository;
-import org.example.repository.CatRepository;
 import org.example.repository.SimpleCatRepository;
 
 import java.io.FileInputStream;
-import java.sql.*;
 import java.util.Properties;
 
 public class App {
@@ -19,7 +17,7 @@ public class App {
         Cat aurka = new Cat("Aурка", 8, false, 4L);
 
 
-        String propertiesPath = Thread.currentThread().getContextClassLoader().getResource("H2CatRepository.properties").getPath();
+        String propertiesPath = "H2CatRepository.properties";
         Properties dbProps = new Properties();
         dbProps.load(new FileInputStream(propertiesPath));
         String dbUrl = dbProps.getProperty("db.url");
