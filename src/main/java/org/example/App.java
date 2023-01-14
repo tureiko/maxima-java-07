@@ -1,53 +1,38 @@
 package org.example;
 
-import java.sql.*;
+import org.example.model.Cat;
+import org.example.repository.BaseRepository;
+import org.example.repository.CatRepository;
+import org.example.repository.SimpleCatRepository;
 
+import java.io.FileInputStream;
+import java.sql.*;
+import java.util.Properties;
 
 public class App {
-
-    public static final String DB_URL = "jdbc:h2:mem:test";   // тестовый сервер
-    public static final String DB_DRIVER = "org.h2.Driver";
+    private static BaseRepository<Cat, Long> baseRepository;
 
     public static void main(String[] args) throws Exception {
+        Cat murzik = new Cat("Мурзик", 5, true, 1L);
+        Cat barsik = new Cat("Барсик", 6, true, 2L);
+        Cat murka = new Cat("Мурка", 8, false, 3L);
+        Cat aurka = new Cat("Aурка", 8, false, 4L);
 
 
-        try {
-            Class.forName(DB_DRIVER);
-            Connection connection = DriverManager.getConnection(DB_URL);
-            System.out.println("Соединение с БД выполнено");
+        String propertiesPath = Thread.currentThread().getContextClassLoader().getResource("H2CatRepository.properties").getPath();
+        Properties dbProps = new Properties();
+        dbProps.load(new FileInputStream(propertiesPath));
+        String dbUrl = dbProps.getProperty("db.url");
 
-            Statement statement = connection.createStatement();
+        baseRepository = new SimpleCatRepository("cats", dbUrl);
 
-            statement.executeUpdate("CREATE TABLE cats (NAME VARCHAR(45), Weight INT)");
-            statement.executeUpdate("INSERT INTO cats(name, weight) VALUES ('Мурзик', 10)");
-            statement.executeUpdate("INSERT INTO cats(name, weight) VALUES ('Рамзес', 2)");
-            statement.executeUpdate("INSERT INTO cats(name, weight) VALUES ('Эдуард', 5)");
-            statement.executeUpdate("INSERT INTO cats(name, weight) VALUES ('Эдуард', 7)");
+        baseRepository.create(barsik);
+        baseRepository.read(2L);
+        baseRepository.update(2L, murka);
+        baseRepository.delete(3L);
+        baseRepository.findAll();
 
-            statement.executeUpdate("ALTER TABLE cats ADD isAngry BIT");
-
-            int rows = statement.executeUpdate("UPDATE cats SET name='Карл' WHERE name = 'Эдуард'");
-            System.out.println("Обновлено записей:" + rows);
-
-            ResultSet result = statement.executeQuery("SELECT * FROM cats");
-            while (result.next()) {
-                String name = result.getString("name");
-                int weight = result.getInt("weight");
-                boolean isAngry = result.getBoolean("isAngry");
-                String template = (isAngry ? "Сердитый" : "Добродушный ") + "кот %s весом %d кг.";
-                System.out.println(String.format(template, name, weight, isAngry));
-            }
-
-            connection.close();
-            System.out.println("Отключение от БД выполнено");
-
-        } catch(ClassNotFoundException e){
-            e.printStackTrace();
-            System.out.println("Нет драйвера БД !!");
-        } catch(SQLException e){
-            e.printStackTrace();
-            System.out.println("Ошибка SQL !!");
-        }
 
     }
 }
+
