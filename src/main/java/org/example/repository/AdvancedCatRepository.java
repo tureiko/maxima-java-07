@@ -4,39 +4,71 @@ import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import org.example.model.Cat;
 
-import javax.sql.DataSource;
+import java.io.FileInputStream;
+import java.io.IOException;
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Properties;
 import java.util.function.Function;
 
-public class AdvancedCatRepository implements CatRepository {
-    //private static HikariConfig config = new HikariConfig(
-    //    "datasource.properties" );
-    private String DB_DRIVER;
-    private String DB_URL;
 
-    public AdvancedCatRepository(String DB_DRIVER, String DB_URL) {
-        this.DB_DRIVER = DB_DRIVER;
-        this.DB_URL = DB_URL;
+public class AdvancedCatRepository implements CatRepository {
+    private static HikariConfig config = new HikariConfig();
+    private static HikariDataSource ds;
+
+    static {
+        String propertiesPath = "application.properties";
+        Properties dbProps = new Properties();
+        try {
+            dbProps.load(new FileInputStream(propertiesPath));
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        String dbUrl = dbProps.getProperty("db.url");
+        String dbDriver = dbProps.getProperty("db.driver");
+
+        config.setJdbcUrl(dbUrl);
+        config.setDriverClassName(dbDriver);
+
+        ds = new HikariDataSource(config);
     }
+
+    Function<ResultSet, Cat> catRowMapper = rs -> {
+        try {
+            return new Cat(
+                    rs.getString("name"),
+                    rs.getInt("weight"),
+                    rs.getBoolean("isAngry"),
+                    rs.getLong("id")
+            );
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+    };
+
+    private static final String SQL_CREATE = "CREATE TABLE IF NOT EXISTS cats (id INT, NAME VARCHAR(45), Weight INT, isAngry BIT)";
 
     @Override
     public boolean create(Cat element) {
         try {
-            HikariConfig config = new HikariConfig();
-            config.setJdbcUrl(DB_URL);
-            config.setDriverClassName(DB_DRIVER);
-            DataSource dataSource = new HikariDataSource(config);
-            Connection connection = dataSource.getConnection();
+            Connection connection = ds.getConnection();
             System.out.println("Соединение с БД выполнено");
 
             Statement statement = connection.createStatement();
+            statement.executeUpdate(SQL_CREATE);
             statement.executeUpdate("CREATE TABLE IF NOT EXISTS cats (id INT, NAME VARCHAR(45), Weight INT, isAngry BIT)");
             statement.executeUpdate((String.format("INSERT INTO cats(name, weight, isAngry, id) VALUES ('%s', %d,'%s', %d)"
                     , element.getName(), element.getWeight(), element.isAngry(), element.getId())));
+            ResultSet result = statement.executeQuery("SELECT * FROM cats");
+            while (result.next()) {
+                Cat cat = catRowMapper.apply(result);
+                String template = (cat.isAngry() ? "Сердитый " : "Добродушный ") + "кот %s весом %d кг.";
+                System.out.println(String.format(template, cat.getName(), cat.getWeight(), cat.isAngry()));
+            }
 
             connection.close();
+            System.out.println("Отключение от БД выполнено");
         } catch (SQLException e) {
             e.printStackTrace();
             System.out.println("Ошибка SQL !!");
@@ -47,28 +79,9 @@ public class AdvancedCatRepository implements CatRepository {
 
     @Override
     public Cat read(Long id) {
-
         try {
-            HikariConfig config = new HikariConfig();
-            config.setJdbcUrl(DB_URL);
-            config.setDriverClassName(DB_DRIVER);
-            DataSource dataSource = new HikariDataSource(config);
-            Connection connection = dataSource.getConnection();
+            Connection connection = ds.getConnection();
             System.out.println("Соединение с БД выполнено");
-
-            Function<ResultSet, Cat> catRowMapper = rs -> {
-                try {
-                    return new Cat(
-                            rs.getString("name"),
-                            rs.getInt("weight"),
-                            rs.getBoolean("isAngry"),
-                            rs.getLong("id")
-                    );
-                } catch (SQLException e) {
-                    throw new RuntimeException(e);
-                }
-            };
-
 
             Statement statement = connection.createStatement();
             String query = (String.format("SELECT * FROM cats WHERE id=%d", id));
@@ -78,7 +91,9 @@ public class AdvancedCatRepository implements CatRepository {
                 String template = (cat.isAngry() ? "Сердитый " : "Добродушный ") + "кот %s весом %d кг.";
                 System.out.println(String.format(template, cat.getName(), cat.getWeight(), cat.isAngry()));
             }
+
             connection.close();
+            System.out.println("Отключение от БД выполнено");
         } catch (SQLException e) {
             e.printStackTrace();
             System.out.println("Ошибка SQL !!");
@@ -90,13 +105,7 @@ public class AdvancedCatRepository implements CatRepository {
     @Override
     public int update(Long id, Cat element) {
         try {
-            HikariConfig config = new HikariConfig();
-            config.setJdbcUrl(DB_URL);
-            config.setDriverClassName(DB_DRIVER);
-            DataSource dataSource = new HikariDataSource(config);
-            Connection connection = dataSource.getConnection();
-            System.out.println("Соединение с БД выполнено");
-
+            Connection connection = ds.getConnection();
 
             String sql = "UPDATE cats SET name=?, weight=?, isAngry=?  WHERE id = ?";
 
@@ -109,6 +118,8 @@ public class AdvancedCatRepository implements CatRepository {
             int rows = preStatement.executeUpdate();
             System.out.println("Обновлено записей: " + rows);
 
+            connection.close();
+            System.out.println("Отключение от БД выполнено");
         } catch (SQLException e) {
             e.printStackTrace();
             System.out.println("Ошибка SQL !!");
@@ -119,19 +130,14 @@ public class AdvancedCatRepository implements CatRepository {
     @Override
     public void delete(Long id) {
         try {
-            HikariConfig config = new HikariConfig();
-            config.setJdbcUrl(DB_URL);
-            config.setDriverClassName(DB_DRIVER);
-            DataSource dataSource = new HikariDataSource(config);
-            Connection connection = dataSource.getConnection();
-            System.out.println("Соединение с БД выполнено");
-
-            PreparedStatement preparedStatement = connection.prepareStatement("DELETE FROM cats WHERE id=?");
+            Connection connection = ds.getConnection();
+            String sql = "DELETE FROM cats WHERE id=?";
+            PreparedStatement preparedStatement = connection.prepareStatement(sql);
             preparedStatement.setLong(1, id);
             int rows = preparedStatement.executeUpdate();
             System.out.println("Удалено записей: " + rows);
-
             connection.close();
+            System.out.println("Отключение от БД выполнено");
         } catch (SQLException e) {
             e.printStackTrace();
             System.out.println("Ошибка SQL !!");
@@ -141,28 +147,10 @@ public class AdvancedCatRepository implements CatRepository {
     @Override
     public List<Cat> findAll() {
         List<Cat> cats = new ArrayList<>();
-        Function<ResultSet, Cat> catRowMapper = rs -> {
-            try {
-                return new Cat(
-                        rs.getString("name"),
-                        rs.getInt("weight"),
-                        rs.getBoolean("isAngry"),
-                        rs.getLong("id")
-                );
-            } catch (SQLException e) {
-                throw new RuntimeException(e);
-            }
-        };
+
         try {
-
-            HikariConfig config = new HikariConfig();
-            config.setJdbcUrl(DB_URL);
-            config.setDriverClassName(DB_DRIVER);
-            DataSource dataSource = new HikariDataSource(config);
-            Connection connection = dataSource.getConnection();
-            System.out.println("Соединение с БД выполнено");
+            Connection connection = ds.getConnection();
             Statement statement = connection.createStatement();
-
             ResultSet result = statement.executeQuery("SELECT * FROM cats");
             while (result.next()) {
                 Cat cat = catRowMapper.apply(result);
@@ -172,6 +160,7 @@ public class AdvancedCatRepository implements CatRepository {
             }
             System.out.println(cats);
             connection.close();
+            System.out.println("Отключение от БД выполнено");
         } catch (SQLException e) {
             e.printStackTrace();
             System.out.println("Ошибка SQL !!");
